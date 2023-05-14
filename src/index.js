@@ -1,106 +1,154 @@
-const itemsArray = localStorage.getItem('items') ? JSON.parse(localStorage.getItem('items')) : [];
+import './style.css';
 
-function createItem(item) {
-  itemsArray.push(item.value);
-  localStorage.setItem('items', JSON.stringify(itemsArray));
-}
+document.addEventListener('DOMContentLoaded', () => {
+// SELECT ELEMENTS
+  const form = document.getElementById('todoform');
+  const todoInput = document.getElementById('newtodo');
+  const todosListEl = document.getElementById('todos-list');
+  const notificationEl = document.querySelector('.notification');
 
-function deleteItem(i) {
-  itemsArray.splice(i, 1);
-  localStorage.setItem('items', JSON.stringify(itemsArray));
-}
+  // VARS
+  let todos = JSON.parse(localStorage.getItem('todos')) || [];
+  let EditTodoId = -1;
 
-function updateItem(text, i) {
-  itemsArray[i] = text;
-  localStorage.setItem('items', JSON.stringify(itemsArray));
-}
+  // 1st render
+  renderTodos();
 
-function activateDeleteListeners() {
-  const deleteBtn = document.querySelectorAll('.deleteBtn');
-  deleteBtn.forEach((dB, i) => {
-    dB.addEventListener('click', () => { deleteItem(i); });
+  // FORM SUBMIT
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+
+    saveTodo();
+    renderTodos();
+    localStorage.setItem('todos', JSON.stringify(todos));
   });
-}
 
-function activateEditListeners() {
-  const editBtn = document.querySelectorAll('.editBtn');
-  const updateController = document.querySelectorAll('.update-controller');
-  const inputs = document.querySelectorAll('.input-controller textarea');
-  editBtn.forEach((eB, i) => {
-    eB.addEventListener('click', () => {
-      updateController[i].style.display = 'block';
-      inputs[i].disabled = false;
-    });
-  });
-}
+  // SAVE TODO
+  function saveTodo() {
+    const todoValue = todoInput.value;
 
-function activateSaveListeners() {
-  const saveBtn = document.querySelectorAll('.saveBtn');
-  const inputs = document.querySelectorAll('.input-controller textarea');
-  saveBtn.forEach((sB, i) => {
-    sB.addEventListener('click', () => {
-      updateItem(inputs[i].value, i);
-    });
-  });
-}
+    // check if the todo is empty
+    const isEmpty = todoValue === '';
 
-function activateCancelListeners() {
-  const cancelBtn = document.querySelectorAll('.cancelBtn');
-  const updateController = document.querySelectorAll('.update-controller');
-  const inputs = document.querySelectorAll('.input-controller textarea');
-  cancelBtn.forEach((cB, i) => {
-    cB.addEventListener('click', () => {
-      updateController[i].style.display = 'none';
-      inputs[i].disabled = true;
-      inputs[i].style.border = 'none';
-    });
-  });
-}
+    // check for duplicate todos
+    const isDuplicate = todos.some((todo) => todo.value.toUpperCase() === todoValue.toUpperCase());
 
-function displayDate() {
-  let date = new Date();
-  date = date.toString().split(' ');
-  date = `${date[1]} ${date[2]} ${date[3]}`;
-  document.querySelector('#date').innerHTML = date;
-}
+    if (isEmpty) {
+      showNotification("Todo's input is empty");
+    } else if (isDuplicate) {
+      showNotification('Todo already exists!');
+    } else {
+      if (EditTodoId >= 0) {
+        todos = todos.map((todo, index) => ({
+          ...todo,
+          value: index === EditTodoId ? todoValue : todo.value,
+        }));
+        EditTodoId = -1;
+      } else {
+        todos.push({
+          value: todoValue,
+          checked: false,
+          color: `#${Math.floor(Math.random() * 16777215).toString(16)}`,
+        });
+      }
 
-function displayItems() {
-  let items = '';
-  for (let i = 0; i < itemsArray.length; i += 1) {
-    items += `<div class="item">
-                <div class="input-controller">
-                  <textarea disabled>${itemsArray[i]}</textarea>
-                  <div class="edit-controller">
-                    <i class="fa-solid fa-check deleteBtn"></i>
-                    <i class="fa-solid fa-pen-to-square editBtn"></i>
-                  </div>
-                </div>
-                <div class="update-controller">
-                  <button class="saveBtn">Save</button>
-                  <button class="cancelBtn">Cancel</button>
-                </div>
-              </div>`;
+      todoInput.value = '';
+    }
   }
-  document.querySelector('.to-do-list').innerHTML = items;
-  activateDeleteListeners();
-  activateEditListeners();
-  activateSaveListeners();
-  activateCancelListeners();
-}
 
-document.querySelector('#enter').addEventListener('click', () => {
-  const item = document.querySelector('#item');
-  createItem(item);
-});
+  // RENDER TODOS
+  function renderTodos() {
+    if (todos.length === 0) {
+      todosListEl.innerHTML = '<center>Nothing to do!</center>';
+      return;
+    }
 
-document.querySelector('#item').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    const item = document.querySelector('#item');
-    createItem(item);
+    // CLEAR ELEMENT BEFORE A RE-RENDER
+    todosListEl.innerHTML = '';
+
+    // RENDER TODOS
+    todos.forEach((todo, index) => {
+      todosListEl.innerHTML += `
+    <div class="todo" id=${index}>
+      <i 
+        class="bi ${todo.checked ? 'bi bi-x-square-fill' : 'bi bi-square'}"
+        style="color : ${todo.color}"
+        data-action="check"
+      ></i>
+      <p class="${todo.checked ? 'checked' : ''}" data-action="check">${todo.value}</p>
+      <i class="bi bi-pencil-square" data-action="edit"></i>
+      <i class="bi bi-trash" data-action="delete"></i>
+    </div>
+    `;
+    });
   }
-});
 
-window.onload = function load() {
-  displayDate();
-  displayItems();
-};
+  // CLICK EVENT LISTENER FOR ALL THE TODOS
+  todosListEl.addEventListener('click', (event) => {
+    const { target } = event;
+    const parentElement = target.parentNode;
+
+    if (parentElement.className !== 'todo') return;
+
+    // t o d o id
+    const todo = parentElement;
+    const todoId = Number(todo.id);
+
+    // target action
+    const { action } = target.dataset;
+
+    action === 'check' && checkTodo(todoId);
+    action === 'edit' && editTodo(todoId);
+    action === 'delete' && deleteTodo(todoId);
+  });
+
+  // CHECK A TODO
+  function checkTodo(todoId) {
+    todos = todos.map((todo, index) => ({
+      ...todo,
+      checked: index === todoId ? !todo.checked : todo.checked,
+    }));
+
+    renderTodos();
+    localStorage.setItem('todos', JSON.stringify(todos));
+  }
+
+  // EDIT A TODO
+  function editTodo(todoId) {
+    todoInput.value = todos[todoId].value;
+    EditTodoId = todoId;
+  }
+
+  // DELETE TODO
+  function deleteTodo(todoId) {
+    todos = todos.filter((todo, index) => index !== todoId);
+    EditTodoId = -1;
+
+    // re-render
+    renderTodos();
+    localStorage.setItem('todos', JSON.stringify(todos));
+  }
+
+  // SHOW A NOTIFICATION
+  function showNotification(msg) {
+  // change the message
+    notificationEl.innerHTML = msg;
+
+    // notification enter
+    notificationEl.classList.add('notif-enter');
+
+    // notification leave
+    setTimeout(() => {
+      notificationEl.classList.remove('notif-enter');
+    }, 2000);
+  }
+
+  // clear all checked todos
+
+  const clearAllBtn = document.getElementById('clearAll');
+  clearAllBtn.addEventListener('click', () => {
+    todos = todos.filter((todo) => !todo.checked);
+    renderTodos();
+    localStorage.setItem('todos', JSON.stringify(todos));
+  });
+});
